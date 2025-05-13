@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/hindi-language-tutor/static/css/main.e700b540.css",
+    "main.js": "/hindi-language-tutor/static/js/main.daff160c.js",
+    "index.html": "/hindi-language-tutor/index.html",
+    "main.e700b540.css.map": "/hindi-language-tutor/static/css/main.e700b540.css.map",
+    "main.daff160c.js.map": "/hindi-language-tutor/static/js/main.daff160c.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.e700b540.css",
+    "static/js/main.daff160c.js"
+  ]
+}
