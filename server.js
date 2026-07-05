@@ -208,11 +208,13 @@ io.on('connection', (socket) => {
   });
 });
 
-// Serve static assets in production
-if (process.env.NODE_ENV === 'production') {
+// Serve static assets in production ONLY when running as a standalone
+// Node server (e.g. Heroku/local). On Vercel, the client build is deployed
+// separately as a static site by vercel.json, so this block is skipped there.
+if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   // Set static folder
   app.use(express.static('client/build'));
-  
+
   app.get('*', (req, res) => {
     res.sendFile(path.resolve(__dirname, 'client', 'build', 'index.html'));
   });
@@ -220,4 +222,12 @@ if (process.env.NODE_ENV === 'production') {
 
 const PORT = process.env.PORT || 5001;
 
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`)); 
+// Only start a persistent listening server when run directly (local dev,
+// Heroku, etc). On Vercel this file is imported as a serverless function
+// module instead, so we must NOT call listen() there.
+if (require.main === module) {
+  server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
+
+// Export the Express app so Vercel can use this file as a serverless function
+module.exports = app;
