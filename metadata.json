@@ -1,0 +1,6 @@
+{
+  "name": "Hindi Language Tutor",
+  "description": "An interactive full-stack Hindi language learning platform featuring courses, quizzes, speaking/writing practice, and progress tracking.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
