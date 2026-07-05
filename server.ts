@@ -13,7 +13,7 @@ import { COURSES } from './src/server/coursesData';
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-hindi-tutor-key-2026';
 
 app.use(express.json());
