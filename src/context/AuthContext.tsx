@@ -60,8 +60,9 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<any>;
   logout: () => void;
-  loginAsGuest: (name?: string) => void;
-  quickDemoLogin: (role: 'learner' | 'admin') => Promise<void>;
+  loginDemoLearner: () => Promise<void>;
+  quickDemoLogin?: (role?: 'learner' | 'admin') => Promise<void>;
+  loginAsGuest?: (name?: string) => void;
   updateProgressState: (newProgress: UserProgress) => void;
   refreshMe: () => Promise<void>;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
@@ -75,45 +76,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   const fetchSession = async () => {
-    const isLoggedOut = localStorage.getItem('hindi_tutor_logged_out');
     const token = localStorage.getItem('hindi_tutor_token');
 
-    // If user explicitly logged out and hasn't logged back in, show login page
-    if (isLoggedOut === 'true' && !token) {
+    if (!token) {
+      setUser(null);
+      setProgress(null);
       setLoading(false);
       return;
     }
 
-    if (token) {
-      try {
-        const data = await API.getMe();
-        setUser(data.user);
-        setProgress(data.progress);
-        setLoading(false);
-        return;
-      } catch (err) {
-        console.warn('Session restoration from server failed, using local/guest session');
-      }
+    try {
+      const data = await API.getMe();
+      setUser(data.user);
+      setProgress(data.progress);
+    } catch (err) {
+      console.warn('Session expired or invalid, logging out');
+      localStorage.removeItem('hindi_tutor_token');
+      localStorage.removeItem('hindi_tutor_user');
+      localStorage.removeItem('hindi_tutor_progress');
+      setUser(null);
+      setProgress(null);
+    } finally {
+      setLoading(false);
     }
-
-    // Default to instant direct access (no login barrier)
-    const localUserRaw = localStorage.getItem('hindi_tutor_user');
-    const localProgressRaw = localStorage.getItem('hindi_tutor_progress');
-    
-    let activeUser: User = localUserRaw ? JSON.parse(localUserRaw) : DEFAULT_GUEST_USER;
-    let activeProgress: UserProgress = localProgressRaw ? JSON.parse(localProgressRaw) : DEFAULT_GUEST_PROGRESS;
-
-    // Reset if user has stale hardcoded test progress
-    if (activeProgress && (activeProgress.xp === 120 || activeProgress.streak === 3)) {
-      activeProgress = { ...DEFAULT_GUEST_PROGRESS, userId: activeUser.id };
-    }
-
-    localStorage.setItem('hindi_tutor_user', JSON.stringify(activeUser));
-    localStorage.setItem('hindi_tutor_progress', JSON.stringify(activeProgress));
-    
-    setUser(activeUser);
-    setProgress(activeProgress);
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -122,7 +107,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, password: string) => {
     setLoading(true);
-    localStorage.removeItem('hindi_tutor_logged_out');
     try {
       const data = await API.login(email, password);
       localStorage.setItem('hindi_tutor_token', data.token);
@@ -141,7 +125,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const register = async (name: string, email: string, password: string) => {
     setLoading(true);
-    localStorage.removeItem('hindi_tutor_logged_out');
     try {
       const data = await API.register(name, email, password);
       localStorage.setItem('hindi_tutor_token', data.token);
@@ -159,55 +142,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const loginAsGuest = (name: string = 'Namaste Learner') => {
-    localStorage.removeItem('hindi_tutor_logged_out');
-    const guestUser: User = {
-      ...DEFAULT_GUEST_USER,
-      name,
-      avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`
-    };
-    const guestProgress = { ...DEFAULT_GUEST_PROGRESS, userId: guestUser.id };
-
-    localStorage.setItem('hindi_tutor_user', JSON.stringify(guestUser));
-    localStorage.setItem('hindi_tutor_progress', JSON.stringify(guestProgress));
-    
-    setUser(guestUser);
-    setProgress(guestProgress);
+  const loginDemoLearner = async () => {
+    await login('learner@namaste.dev', 'namaste123');
   };
 
-  const quickDemoLogin = async (role: 'learner' | 'admin') => {
-    if (role === 'admin') {
-      try {
-        await login('ayushikarwa2019@gmail.com', 'admin123');
-      } catch {
-        const adminUser: User = {
-          id: 'usr_admin_ayushi',
-          name: 'Ayushi Karwa',
-          email: 'ayushikarwa2019@gmail.com',
-          avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Ayushi',
-          verified: true,
-          createdAt: new Date().toISOString()
-        };
-        const adminProgress = { ...DEFAULT_GUEST_PROGRESS, userId: adminUser.id, xp: 250, level: 3, streak: 5 };
-        localStorage.removeItem('hindi_tutor_logged_out');
-        localStorage.setItem('hindi_tutor_user', JSON.stringify(adminUser));
-        localStorage.setItem('hindi_tutor_progress', JSON.stringify(adminProgress));
-        setUser(adminUser);
-        setProgress(adminProgress);
-      }
-    } else {
-      try {
-        await login('learner@namaste.dev', 'namaste123');
-      } catch {
-        loginAsGuest('Namaste Learner');
-      }
-    }
+  const quickDemoLogin = async (_role?: 'learner' | 'admin') => {
+    await loginDemoLearner();
+  };
+
+  const loginAsGuest = (_name?: string) => {
+    loginDemoLearner();
   };
 
   const logout = () => {
     localStorage.removeItem('hindi_tutor_token');
     localStorage.removeItem('hindi_tutor_user');
-    localStorage.setItem('hindi_tutor_logged_out', 'true');
+    localStorage.removeItem('hindi_tutor_progress');
     setUser(null);
     setProgress(null);
   };
@@ -237,8 +187,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       login,
       register,
       logout,
-      loginAsGuest,
+      loginDemoLearner,
       quickDemoLogin,
+      loginAsGuest,
       updateProgressState,
       refreshMe,
       setUser

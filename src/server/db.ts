@@ -131,29 +131,31 @@ export const DB = {
   },
 
   getUserByEmail(email: string): User | undefined {
-    return this.getUsers().find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (!email) return undefined;
+    const normalized = email.trim().toLowerCase();
+    return this.getUsers().find(u => u.email.trim().toLowerCase() === normalized);
   },
 
   async createUser(name: string, email: string, passwordPlain: string): Promise<User> {
     const db = loadDB();
-    const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    const existing = db.users.find(u => u.email.trim().toLowerCase() === cleanEmail);
     if (existing) {
-      throw new Error('User already exists');
+      throw new Error('An account with this email already exists');
     }
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(passwordPlain, salt);
-    
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     const newUser: User = {
       id: 'usr_' + Math.random().toString(36).substr(2, 9),
-      name,
-      email: email.toLowerCase(),
+      name: cleanName,
+      email: cleanEmail,
       password: passwordHash,
-      avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`,
-      verified: false,
-      verificationCode,
+      avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(cleanName)}`,
+      verified: true,
       createdAt: new Date().toISOString()
     };
 

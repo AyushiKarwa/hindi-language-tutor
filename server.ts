@@ -52,7 +52,12 @@ function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): vo
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
-    res.status(400).json({ error: 'Please provide all required fields' });
+    res.status(400).json({ error: 'Please provide name, email, and password' });
+    return;
+  }
+
+  if (password.length < 6) {
+    res.status(400).json({ error: 'Password must be at least 6 characters long' });
     return;
   }
 
@@ -61,14 +66,13 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
     const token = jwt.sign({ id: newUser.id, email: newUser.email }, JWT_SECRET, { expiresIn: '7d' });
     
     res.status(201).json({
-      message: 'Registration successful! A verification code has been sent.',
+      message: 'Account created successfully! Welcome to Namaste Hindi.',
       user: {
         id: newUser.id,
         name: newUser.name,
         email: newUser.email,
         avatar: newUser.avatar,
-        verified: newUser.verified,
-        verificationCode: newUser.verificationCode // Exposing code for easy copy/paste in UI
+        verified: newUser.verified
       },
       token
     });
@@ -81,20 +85,20 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
 app.post('/api/auth/login', async (req: Request, res: Response) => {
   const { email, password } = req.body;
   if (!email || !password) {
-    res.status(400).json({ error: 'Please specify email and password' });
+    res.status(400).json({ error: 'Please enter both email and password' });
     return;
   }
 
   const user = DB.getUserByEmail(email);
   if (!user) {
-    res.status(400).json({ error: 'Invalid email or password' });
+    res.status(401).json({ error: 'Invalid email or password. Please check your credentials.' });
     return;
   }
 
   // Verify password using bcryptjs
   const valid = await bcrypt.compare(password, user.password);
   if (!valid) {
-    res.status(400).json({ error: 'Invalid email or password' });
+    res.status(401).json({ error: 'Invalid email or password. Please check your credentials.' });
     return;
   }
 

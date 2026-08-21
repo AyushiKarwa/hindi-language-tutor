@@ -6,16 +6,16 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { API } from '../lib/api';
-import { Mail, Lock, User as UserIcon, Sparkles, RefreshCw, KeyRound, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, Sparkles, RefreshCw, KeyRound, CheckCircle2 } from 'lucide-react';
 
 interface AuthWindowProps {
   onSuccess: () => void;
 }
 
-type AuthMode = 'login' | 'register' | 'forgot' | 'reset' | 'verify';
+type AuthMode = 'login' | 'register' | 'forgot' | 'reset';
 
 export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
-  const { login, register, loginAsGuest, quickDemoLogin } = useAuth();
+  const { login, register, loginDemoLearner } = useAuth();
 
   // Mode controllers
   const [mode, setMode] = useState<AuthMode>('login');
@@ -27,7 +27,6 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
   const [rememberMe, setRememberMe] = useState(true);
 
   // Verification/Reset states
-  const [verificationCode, setVerificationCode] = useState('');
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
@@ -44,13 +43,19 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     clearMessages();
+    
+    if (!email.trim() || !password) {
+      setErrorMsg('Please enter both email and password.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       onSuccess();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Login failed. Please double check credentials.');
+      setErrorMsg(err.message || 'Invalid email or password. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -59,69 +64,61 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     clearMessages();
+
+    if (!name.trim() || !email.trim() || !password) {
+      setErrorMsg('Please fill in all required fields.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters long.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const data = await register(name, email, password);
-      
-      // Auto-populate verification code in helper text for preview comfort!
-      if (data.user?.verificationCode) {
-        setSuccessMsg(`Account created! Your verification code is: ${data.user.verificationCode}`);
-      } else {
-        setSuccessMsg('Account created! Please enter verification code.');
-      }
-      setMode('verify');
+      await register(name.trim(), email.trim(), password);
+      onSuccess();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Registration failed. Try using another email.');
+      setErrorMsg(err.message || 'Registration failed. An account with this email may already exist.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleDemoLogin = async () => {
     clearMessages();
     setLoading(true);
 
     try {
-      await API.verifyEmail(email, verificationCode);
-      setSuccessMsg('Email successfully verified! Logging in...');
-      setTimeout(() => {
-        onSuccess();
-      }, 1500);
+      await loginDemoLearner();
+      onSuccess();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Incorrect verification code.');
+      setErrorMsg(err.message || 'Demo login failed. Please try logging in manually.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleResendCode = async () => {
-    clearMessages();
-    try {
-      const data = await API.resendCode(email);
-      if (data.verificationCode) {
-        setSuccessMsg(`A new code was generated: ${data.verificationCode}`);
-      } else {
-        setSuccessMsg('A new verification code has been generated!');
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Resend code failed.');
     }
   };
 
   const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
     clearMessages();
+
+    if (!email.trim()) {
+      setErrorMsg('Please enter your registered email.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const data = await API.forgotPassword(email);
-      setSuccessMsg(`Instructions sent! Your password-reset code is: ${data.resetToken}`);
+      const data = await API.forgotPassword(email.trim());
+      setSuccessMsg(`Instructions generated! Reset code: ${data.resetToken}`);
       setResetToken(data.resetToken || '');
       setMode('reset');
     } catch (err: any) {
-      setErrorMsg(err.message || 'Forgot request failed.');
+      setErrorMsg(err.message || 'Unable to process reset request.');
     } finally {
       setLoading(false);
     }
@@ -130,15 +127,26 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     clearMessages();
+
+    if (!resetToken.trim() || !newPassword) {
+      setErrorMsg('Please enter both the reset code and a new password.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setErrorMsg('New password must be at least 6 characters long.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await API.resetPassword(email, resetToken, newPassword);
+      await API.resetPassword(email.trim(), resetToken.trim(), newPassword);
       setSuccessMsg('Password successfully updated! You can now log in.');
       setMode('login');
       setPassword('');
     } catch (err: any) {
-      setErrorMsg(err.message || 'Incorrect token or email.');
+      setErrorMsg(err.message || 'Invalid reset code or email.');
     } finally {
       setLoading(false);
     }
@@ -155,18 +163,16 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
         
         <h3 className="font-sans font-extrabold text-2xl text-slate-800 dark:text-slate-100 tracking-tight">
           {mode === 'login' && 'Welcome Back'}
-          {mode === 'register' && 'Start Learning Hindi'}
+          {mode === 'register' && 'Create Your Account'}
           {mode === 'forgot' && 'Reset Your Password'}
-          {mode === 'reset' && 'Apply New Password'}
-          {mode === 'verify' && 'Verify Your Email'}
+          {mode === 'reset' && 'Set New Password'}
         </h3>
         
         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 font-medium">
-          {mode === 'login' && "Sign in to access your custom stats and courses."}
-          {mode === 'register' && "Join global Namaste leagues and earn XP rewards."}
-          {mode === 'forgot' && "Specify your email to generate a restoration code."}
-          {mode === 'reset' && "Enter your restoration code and a secure password."}
-          {mode === 'verify' && `Input the 6-digit pin sent to ${email}`}
+          {mode === 'login' && 'Sign in to access your Hindi courses and saved progress.'}
+          {mode === 'register' && 'Join Namaste Hindi to track your learning journey and earn XP.'}
+          {mode === 'forgot' && 'Enter your email to receive a password reset code.'}
+          {mode === 'reset' && 'Enter your reset code and set your new password.'}
         </p>
       </div>
 
@@ -188,40 +194,10 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
       )}
 
       {/* ========================================== */}
-      {/* AUTH MODE FORM HANDLERS */}
+      {/* 1. LOGIN FORM */}
       {/* ========================================== */}
-
-      {/* 1. Login Form */}
       {mode === 'login' && (
         <form onSubmit={handleLogin} className="space-y-4">
-          <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 rounded-xl text-xs space-y-1">
-            <p className="font-bold text-indigo-700 dark:text-indigo-300 flex items-center justify-between">
-              <span>💡 Pre-configured Demo Accounts:</span>
-            </p>
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setEmail('learner@namaste.dev');
-                  setPassword('namaste123');
-                }}
-                className="px-2 py-1 bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 rounded-lg text-[11px] text-indigo-600 dark:text-indigo-400 font-mono hover:bg-indigo-50 transition"
-              >
-                learner@namaste.dev (Fill)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEmail('ayushikarwa2019@gmail.com');
-                  setPassword('admin123');
-                }}
-                className="px-2 py-1 bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-700 rounded-lg text-[11px] text-amber-600 dark:text-amber-400 font-mono hover:bg-amber-50 transition"
-              >
-                Admin (Fill)
-              </button>
-            </div>
-          </div>
-
           <div>
             <label className="block text-[10px] text-slate-400 font-mono uppercase font-bold mb-1">Email Address</label>
             <div className="relative">
@@ -282,56 +258,29 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-extrabold text-xs rounded-xl shadow-md shadow-indigo-500/10 active:scale-[0.98] transition flex items-center justify-center space-x-1.5"
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-extrabold text-xs rounded-xl shadow-md shadow-indigo-500/10 active:scale-[0.98] transition flex items-center justify-center space-x-1.5 cursor-pointer"
           >
             {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Sign In &rarr;</span>}
           </button>
 
-          {/* Quick 1-Click Access / Skip Login Section */}
-          <div className="pt-3 border-t border-slate-150 dark:border-slate-800/80 space-y-2">
-            <p className="text-[10px] uppercase font-mono font-bold text-center text-slate-400">Quick 1-Click Access</p>
-            
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  quickDemoLogin('learner');
-                  onSuccess();
-                }}
-                className="py-2 px-3 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-sans font-bold text-xs rounded-xl border border-purple-200/50 dark:border-purple-800/50 transition flex items-center justify-center space-x-1"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Demo Learner</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  quickDemoLogin('admin');
-                  onSuccess();
-                }}
-                className="py-2 px-3 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-sans font-bold text-xs rounded-xl border border-amber-200/50 dark:border-amber-800/50 transition flex items-center justify-center space-x-1"
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Admin Demo</span>
-              </button>
-            </div>
-
+          {/* Single Demo Option: Demo Learner */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80">
             <button
               type="button"
-              onClick={() => {
-                loginAsGuest('Namaste Learner');
-                onSuccess();
-              }}
-              className="w-full py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-sans font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1"
+              disabled={loading}
+              onClick={handleDemoLogin}
+              className="w-full py-2.5 px-3 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-sans font-bold text-xs rounded-xl border border-purple-200/50 dark:border-purple-800/50 transition flex items-center justify-center space-x-1.5 cursor-pointer"
             >
-              <span>🚀 Enter Tutor Directly (Skip Login)</span>
+              <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+              <span>Try Demo Learner Account</span>
             </button>
           </div>
         </form>
       )}
 
-      {/* 2. Register Form */}
+      {/* ========================================== */}
+      {/* 2. REGISTER FORM */}
+      {/* ========================================== */}
       {mode === 'register' && (
         <form onSubmit={handleRegister} className="space-y-4">
           <div>
@@ -369,7 +318,7 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
           </div>
 
           <div>
-            <label className="block text-[10px] text-slate-400 font-mono uppercase font-bold mb-1">Create Password</label>
+            <label className="block text-[10px] text-slate-400 font-mono uppercase font-bold mb-1">Password</label>
             <div className="relative">
               <span className="absolute inset-y-0 left-3 flex items-center text-slate-400">
                 <Lock className="w-4 h-4" />
@@ -379,7 +328,7 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="Minimum 6 characters"
                 className="w-full pl-9 pr-4 py-2.5 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all"
               />
             </div>
@@ -388,55 +337,16 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-extrabold text-xs rounded-xl shadow-md shadow-indigo-500/10 active:scale-[0.98] transition flex items-center justify-center space-x-1.5"
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-extrabold text-xs rounded-xl shadow-md shadow-indigo-500/10 active:scale-[0.98] transition flex items-center justify-center space-x-1.5 cursor-pointer"
           >
-            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Assemble Account &rarr;</span>}
+            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Create Account &rarr;</span>}
           </button>
         </form>
       )}
 
-      {/* 3. Verification Code verification Form */}
-      {mode === 'verify' && (
-        <form onSubmit={handleVerify} className="space-y-4">
-          <div>
-            <label className="block text-[10px] text-slate-400 font-mono uppercase font-bold mb-1">Enter Verification Code</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-3 flex items-center text-slate-400">
-                <ShieldCheck className="w-4 h-4" />
-              </span>
-              <input
-                type="text"
-                required
-                value={verificationCode}
-                onChange={(e) => setVerificationCode(e.target.value)}
-                placeholder="6-Digit PIN"
-                maxLength={6}
-                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-xs font-mono text-slate-800 dark:text-slate-200 text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-sans font-extrabold text-xs rounded-xl active:scale-[0.98] transition flex items-center justify-center"
-          >
-            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Confirm Pin Code</span>}
-          </button>
-
-          <div className="text-center pt-2 border-t border-slate-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={handleResendCode}
-              className="text-xs text-indigo-600 dark:text-indigo-400 font-sans font-semibold hover:underline"
-            >
-              Didn't receive code? Resend PIN
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* 4. Forgot Password Email submission Form */}
+      {/* ========================================== */}
+      {/* 3. FORGOT PASSWORD FORM */}
+      {/* ========================================== */}
       {mode === 'forgot' && (
         <form onSubmit={handleForgot} className="space-y-4">
           <div>
@@ -459,26 +369,28 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-extrabold text-xs rounded-xl transition flex items-center justify-center"
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-extrabold text-xs rounded-xl transition flex items-center justify-center cursor-pointer"
           >
-            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Generate Restoration Code</span>}
+            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Generate Reset Code</span>}
           </button>
 
           <button
             type="button"
             onClick={() => { clearMessages(); setMode('login'); }}
-            className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 block text-center mx-auto"
+            className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 block text-center mx-auto cursor-pointer"
           >
             &larr; Back to Login
           </button>
         </form>
       )}
 
-      {/* 5. Reset Password Form */}
+      {/* ========================================== */}
+      {/* 4. RESET PASSWORD FORM */}
+      {/* ========================================== */}
       {mode === 'reset' && (
         <form onSubmit={handleReset} className="space-y-4">
           <div>
-            <label className="block text-[10px] text-slate-400 font-mono uppercase font-bold mb-1">Restoration Code</label>
+            <label className="block text-[10px] text-slate-400 font-mono uppercase font-bold mb-1">Reset Code</label>
             <div className="relative">
               <span className="absolute inset-y-0 left-3 flex items-center text-slate-400">
                 <KeyRound className="w-4 h-4" />
@@ -495,7 +407,7 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
           </div>
 
           <div>
-            <label className="block text-[10px] text-slate-400 font-mono uppercase font-bold mb-1">New Secure Password</label>
+            <label className="block text-[10px] text-slate-400 font-mono uppercase font-bold mb-1">New Password</label>
             <div className="relative">
               <span className="absolute inset-y-0 left-3 flex items-center text-slate-400">
                 <Lock className="w-4 h-4" />
@@ -505,7 +417,7 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
                 required
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Minimum 8 characters"
+                placeholder="Minimum 6 characters"
                 className="w-full pl-9 pr-4 py-2.5 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none"
               />
             </div>
@@ -514,14 +426,14 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-extrabold text-xs rounded-xl transition flex items-center justify-center"
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-extrabold text-xs rounded-xl transition flex items-center justify-center cursor-pointer"
           >
-            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Reset Password &rarr;</span>}
+            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Update Password &rarr;</span>}
           </button>
         </form>
       )}
 
-      {/* Toggle mode footnotes */}
+      {/* Mode Switchers */}
       {(mode === 'login' || mode === 'register') && (
         <div className="text-center pt-5 border-t border-slate-100 dark:border-slate-800 mt-5 text-xs text-slate-400">
           {mode === 'login' ? (
@@ -530,7 +442,7 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
               <button
                 type="button"
                 onClick={() => { clearMessages(); setMode('register'); }}
-                className="text-indigo-600 dark:text-indigo-400 font-sans font-bold hover:underline"
+                className="text-indigo-600 dark:text-indigo-400 font-sans font-bold hover:underline cursor-pointer"
               >
                 Create an account
               </button>
@@ -541,7 +453,7 @@ export const AuthWindow: React.FC<AuthWindowProps> = ({ onSuccess }) => {
               <button
                 type="button"
                 onClick={() => { clearMessages(); setMode('login'); }}
-                className="text-indigo-600 dark:text-indigo-400 font-sans font-bold hover:underline"
+                className="text-indigo-600 dark:text-indigo-400 font-sans font-bold hover:underline cursor-pointer"
               >
                 Log In instead
               </button>

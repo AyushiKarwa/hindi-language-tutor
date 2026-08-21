@@ -16,8 +16,12 @@ function getHeaders(): HeadersInit {
   };
 }
 
-function getLocalProgress(): UserProgress | null {
+function getLocalProgress(userId?: string): UserProgress | null {
   try {
+    if (userId) {
+      const userSpecific = localStorage.getItem(`hindi_tutor_progress_${userId}`);
+      if (userSpecific) return JSON.parse(userSpecific);
+    }
     const raw = localStorage.getItem('hindi_tutor_progress');
     return raw ? JSON.parse(raw) : null;
   } catch {
@@ -25,11 +29,85 @@ function getLocalProgress(): UserProgress | null {
   }
 }
 
-function saveLocalProgress(prog: UserProgress): void {
+function saveLocalProgress(prog: UserProgress, userId?: string): void {
   try {
+    const id = userId || prog.userId;
+    if (id) {
+      localStorage.setItem(`hindi_tutor_progress_${id}`, JSON.stringify(prog));
+    }
     localStorage.setItem('hindi_tutor_progress', JSON.stringify(prog));
   } catch (err) {
     console.error('Error saving local progress:', err);
+  }
+}
+
+const createInitialProgress = (userId: string): UserProgress => ({
+  userId,
+  xp: 0,
+  coins: 0,
+  level: 1,
+  streak: 0,
+  lastActive: null,
+  completedCourses: [],
+  completedLessons: [],
+  pronunciationScore: 0,
+  quizScore: 0,
+  writingScore: 0,
+  readingScore: 0,
+  listeningScore: 0,
+  xpHistory: [
+    { date: new Date().toISOString().split('T')[0], xp: 0 }
+  ],
+  learningCalendar: [],
+  bookmarks: [],
+  settings: {
+    theme: 'light',
+    dailyGoal: 50,
+    emailNotifications: true,
+    soundEffects: true
+  },
+  achievements: [
+    { id: 'first-steps', title: 'First Steps', description: 'Complete your first lesson', icon: 'Footprints', progress: 0, maxProgress: 1 },
+    { id: 'streak-3', title: 'Consistent Learner', description: 'Maintain a 3-day learning streak', icon: 'Flame', progress: 0, maxProgress: 3 },
+    { id: 'xp-100', title: 'XP Collector', description: 'Earn a total of 100 XP', icon: 'Award', progress: 0, maxProgress: 100 },
+    { id: 'coins-50', title: 'Coin Hoarder', description: 'Accumulate 50 learning coins', icon: 'Coins', progress: 0, maxProgress: 50 },
+    { id: 'pronunciation-champ', title: 'Fluent Speaker', description: 'Log a pronunciation practice score of 90% or above', icon: 'Mic', progress: 0, maxProgress: 1 },
+    { id: 'quiz-master', title: 'Perfect Quizzer', description: 'Complete 3 quizzes with a score of 100%', icon: 'Sparkles', progress: 0, maxProgress: 3 }
+  ],
+  badges: [],
+  certificates: []
+});
+
+interface StoredLocalUser extends User {
+  passwordPlain?: string;
+}
+
+function getStoredLocalUsers(): StoredLocalUser[] {
+  try {
+    const raw = localStorage.getItem('hindi_tutor_registered_users');
+    const list: StoredLocalUser[] = raw ? JSON.parse(raw) : [];
+    if (!list.find(u => u.email.toLowerCase() === 'learner@namaste.dev')) {
+      list.push({
+        id: 'usr_demo_learner',
+        name: 'Namaste Learner',
+        email: 'learner@namaste.dev',
+        passwordPlain: 'namaste123',
+        avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=NamasteLearner',
+        verified: true,
+        createdAt: new Date().toISOString()
+      });
+    }
+    return list;
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredLocalUsers(users: StoredLocalUser[]) {
+  try {
+    localStorage.setItem('hindi_tutor_registered_users', JSON.stringify(users));
+  } catch (err) {
+    console.error('Error saving local users:', err);
   }
 }
 
@@ -134,65 +212,91 @@ function applyXPUpdate(progress: UserProgress, xpAmount: number, coinsAmount: nu
 export const API = {
   // Auth calls
   async register(name: string, email: string, password: string) {
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
       const res = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password })
+        body: JSON.stringify({ name: cleanName, email: cleanEmail, password })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Registration failed');
       return data as { message: string; user: User; token: string };
     } catch (err: any) {
-      if (err.message && err.message !== 'Failed to fetch' && !err.message.includes('fetch')) {
+      if (err.message && !err.message.includes('fetch') && err.message !== 'Failed to fetch' && err.name !== 'TypeError') {
         throw err;
       }
-      // Offline fallback registration
-      const fakeUser: User = {
+      // Offline fallback registration with persistent local storage
+      const localUsers = getStoredLocalUsers();
+      if (localUsers.some(u => u.email.toLowerCase() === cleanEmail)) {
+        throw new Error('An account with this email already exists');
+      }
+      const newUser: StoredLocalUser = {
         id: 'usr_' + Math.random().toString(36).substr(2, 9),
-        name,
-        email: email.toLowerCase(),
-        avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`,
+        name: cleanName,
+        email: cleanEmail,
+        passwordPlain: password,
+        avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(cleanName)}`,
         verified: true,
         createdAt: new Date().toISOString()
       };
-      const token = 'guest_token_' + Date.now();
+      localUsers.push(newUser);
+      saveStoredLocalUsers(localUsers);
+
+      const newProg = createInitialProgress(newUser.id);
+      saveLocalProgress(newProg, newUser.id);
+
+      const token = 'local_token_' + Date.now();
       localStorage.setItem('hindi_tutor_token', token);
-      localStorage.setItem('hindi_tutor_user', JSON.stringify(fakeUser));
-      return { message: 'Registered locally', user: fakeUser, token };
+      localStorage.setItem('hindi_tutor_user', JSON.stringify(newUser));
+      localStorage.setItem('hindi_tutor_progress', JSON.stringify(newProg));
+      return { message: 'Account created successfully!', user: newUser, token };
     }
   },
 
   async login(email: string, password: string) {
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email: cleanEmail, password })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Login failed');
+      if (!res.ok) throw new Error(data.error || 'Invalid email or password. Please check your credentials.');
       return data as { message: string; user: User; token: string };
     } catch (err: any) {
-      if (err.message && err.message !== 'Failed to fetch' && !err.message.includes('fetch')) {
+      if (err.message && !err.message.includes('fetch') && err.message !== 'Failed to fetch' && err.name !== 'TypeError') {
         throw err;
       }
-      // Offline demo fallback
-      const isLearner = email.toLowerCase().includes('learner') || email.toLowerCase().includes('demo');
-      const isAdmin = email.toLowerCase().includes('admin') || email.toLowerCase() === 'ayushikarwa2019@gmail.com';
-      const name = isAdmin ? 'Ayushi Karwa' : (isLearner ? 'Namaste Learner' : email.split('@')[0]);
+      // Offline fallback: genuine credential verification from local store
+      const localUsers = getStoredLocalUsers();
+      const match = localUsers.find(u => u.email.toLowerCase() === cleanEmail);
+      if (!match || match.passwordPlain !== password) {
+        throw new Error('Invalid email or password. Please check your credentials.');
+      }
       const user: User = {
-        id: isAdmin ? 'usr_admin_ayushi' : 'usr_demo_learner',
-        name,
-        email: email.toLowerCase(),
-        avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`,
-        verified: true,
-        createdAt: new Date().toISOString()
+        id: match.id,
+        name: match.name,
+        email: match.email,
+        avatar: match.avatar,
+        verified: match.verified,
+        createdAt: match.createdAt
       };
       const token = 'local_token_' + Date.now();
       localStorage.setItem('hindi_tutor_token', token);
       localStorage.setItem('hindi_tutor_user', JSON.stringify(user));
-      return { message: 'Logged in locally', user, token };
+
+      let userProg = getLocalProgress(user.id);
+      if (!userProg) {
+        userProg = createInitialProgress(user.id);
+      }
+      saveLocalProgress(userProg, user.id);
+
+      return { message: 'Welcome back!', user, token };
     }
   },
 
@@ -266,14 +370,22 @@ export const API = {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to fetch current user');
       if (data.progress) {
-        saveLocalProgress(data.progress);
+        saveLocalProgress(data.progress, data.user?.id);
       }
       return data as { user: User; progress: UserProgress };
-    } catch (err) {
-      const savedUser = localStorage.getItem('hindi_tutor_user');
-      const savedProgress = getLocalProgress();
-      if (savedUser && savedProgress) {
-        return { user: JSON.parse(savedUser), progress: savedProgress };
+    } catch (err: any) {
+      if (err.message && !err.message.includes('fetch') && err.message !== 'Failed to fetch' && err.name !== 'TypeError') {
+        throw err;
+      }
+      const savedUserRaw = localStorage.getItem('hindi_tutor_user');
+      if (savedUserRaw) {
+        const user: User = JSON.parse(savedUserRaw);
+        let savedProgress = getLocalProgress(user.id);
+        if (!savedProgress) {
+          savedProgress = createInitialProgress(user.id);
+          saveLocalProgress(savedProgress, user.id);
+        }
+        return { user, progress: savedProgress };
       }
       throw err;
     }
