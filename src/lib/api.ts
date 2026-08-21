@@ -209,6 +209,21 @@ function applyXPUpdate(progress: UserProgress, xpAmount: number, coinsAmount: nu
   return progress;
 }
 
+async function safeFetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, options);
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error('SERVER_OFFLINE');
+  }
+  const data = await res.json().catch(() => {
+    throw new Error('SERVER_OFFLINE');
+  });
+  if (!res.ok) {
+    throw new Error(data?.error || `Request failed with status ${res.status}`);
+  }
+  return data as T;
+}
+
 export const API = {
   // Auth calls
   async register(name: string, email: string, password: string) {
@@ -216,16 +231,17 @@ export const API = {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-      const res = await fetch(`${API_BASE}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: cleanName, email: cleanEmail, password })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Registration failed');
-      return data as { message: string; user: User; token: string };
+      const data = await safeFetchJson<{ message: string; user: User; token: string }>(
+        `${API_BASE}/auth/register`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: cleanName, email: cleanEmail, password })
+        }
+      );
+      return data;
     } catch (err: any) {
-      if (err.message && !err.message.includes('fetch') && err.message !== 'Failed to fetch' && err.name !== 'TypeError') {
+      if (err.message && err.message !== 'SERVER_OFFLINE' && !err.message.includes('fetch') && !err.message.includes('JSON')) {
         throw err;
       }
       // Offline fallback registration with persistent local storage
@@ -260,16 +276,17 @@ export const API = {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, password })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Invalid email or password. Please check your credentials.');
-      return data as { message: string; user: User; token: string };
+      const data = await safeFetchJson<{ message: string; user: User; token: string }>(
+        `${API_BASE}/auth/login`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password })
+        }
+      );
+      return data;
     } catch (err: any) {
-      if (err.message && !err.message.includes('fetch') && err.message !== 'Failed to fetch' && err.name !== 'TypeError') {
+      if (err.message && err.message !== 'SERVER_OFFLINE' && !err.message.includes('fetch') && !err.message.includes('JSON')) {
         throw err;
       }
       // Offline fallback: genuine credential verification from local store
@@ -302,14 +319,15 @@ export const API = {
 
   async verifyEmail(email: string, code: string) {
     try {
-      const res = await fetch(`${API_BASE}/auth/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Verification failed');
-      return data as { message: string };
+      const data = await safeFetchJson<{ message: string }>(
+        `${API_BASE}/auth/verify`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, code })
+        }
+      );
+      return data;
     } catch (err: any) {
       return { message: 'Verified successfully' };
     }
@@ -317,14 +335,15 @@ export const API = {
 
   async resendCode(email: string) {
     try {
-      const res = await fetch(`${API_BASE}/auth/resend-code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Resend failed');
-      return data as { message: string; verificationCode?: string };
+      const data = await safeFetchJson<{ message: string; verificationCode?: string }>(
+        `${API_BASE}/auth/resend-code`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        }
+      );
+      return data;
     } catch {
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       return { message: 'New code generated', verificationCode: code };
@@ -333,14 +352,15 @@ export const API = {
 
   async forgotPassword(email: string) {
     try {
-      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Forgot password request failed');
-      return data as { message: string; resetToken?: string };
+      const data = await safeFetchJson<{ message: string; resetToken?: string }>(
+        `${API_BASE}/auth/forgot-password`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        }
+      );
+      return data;
     } catch {
       const token = 'rst_' + Math.random().toString(36).substr(2, 6);
       return { message: 'Reset token generated', resetToken: token };
@@ -349,14 +369,15 @@ export const API = {
 
   async resetPassword(email: string, resetToken: string, newPassword: string) {
     try {
-      const res = await fetch(`${API_BASE}/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, resetToken, newPassword })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Reset password failed');
-      return data as { message: string };
+      const data = await safeFetchJson<{ message: string }>(
+        `${API_BASE}/auth/reset-password`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, resetToken, newPassword })
+        }
+      );
+      return data;
     } catch {
       return { message: 'Password updated successfully' };
     }
@@ -364,19 +385,15 @@ export const API = {
 
   async getMe() {
     try {
-      const res = await fetch(`${API_BASE}/auth/me`, {
-        headers: getHeaders()
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch current user');
+      const data = await safeFetchJson<{ user: User; progress: UserProgress }>(
+        `${API_BASE}/auth/me`,
+        { headers: getHeaders() }
+      );
       if (data.progress) {
         saveLocalProgress(data.progress, data.user?.id);
       }
-      return data as { user: User; progress: UserProgress };
+      return data;
     } catch (err: any) {
-      if (err.message && !err.message.includes('fetch') && err.message !== 'Failed to fetch' && err.name !== 'TypeError') {
-        throw err;
-      }
       const savedUserRaw = localStorage.getItem('hindi_tutor_user');
       if (savedUserRaw) {
         const user: User = JSON.parse(savedUserRaw);
@@ -387,7 +404,7 @@ export const API = {
         }
         return { user, progress: savedProgress };
       }
-      throw err;
+      throw new Error('Session expired. Please log in again.');
     }
   },
 
