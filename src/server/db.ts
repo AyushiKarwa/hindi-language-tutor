@@ -58,7 +58,6 @@ const INITIAL_PROGRESS = (userId: string): UserProgress => ({
 
 function getSeedData(): Schema {
   const learnerPass = bcrypt.hashSync('namaste123', 10);
-  const adminPass = bcrypt.hashSync('admin123', 10);
 
   const demoLearner: User = {
     id: 'usr_demo_learner',
@@ -70,21 +69,10 @@ function getSeedData(): Schema {
     createdAt: new Date().toISOString()
   };
 
-  const demoAdmin: User = {
-    id: 'usr_admin_ayushi',
-    name: 'Ayushi Karwa',
-    email: 'ayushikarwa2019@gmail.com',
-    password: adminPass,
-    avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Ayushi',
-    verified: true,
-    createdAt: new Date().toISOString()
-  };
-
   return {
-    users: [demoLearner, demoAdmin],
+    users: [demoLearner],
     progress: {
-      [demoLearner.id]: INITIAL_PROGRESS(demoLearner.id),
-      [demoAdmin.id]: INITIAL_PROGRESS(demoAdmin.id)
+      [demoLearner.id]: INITIAL_PROGRESS(demoLearner.id)
     }
   };
 }

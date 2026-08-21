@@ -106,40 +106,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const login = async (email: string, password: string) => {
-    setLoading(true);
+    const data = await API.login(email, password);
+    localStorage.setItem('hindi_tutor_token', data.token);
+    localStorage.setItem('hindi_tutor_user', JSON.stringify(data.user));
+    setUser(data.user);
+    
     try {
-      const data = await API.login(email, password);
-      localStorage.setItem('hindi_tutor_token', data.token);
-      localStorage.setItem('hindi_tutor_user', JSON.stringify(data.user));
-      setUser(data.user);
-      
       const meData = await API.getMe();
       setProgress(meData.progress);
       localStorage.setItem('hindi_tutor_progress', JSON.stringify(meData.progress));
-    } catch (err) {
-      throw err;
-    } finally {
-      setLoading(false);
+    } catch {
+      // Local progress already initialized
     }
   };
 
   const register = async (name: string, email: string, password: string) => {
-    setLoading(true);
+    const data = await API.register(name, email, password);
+    localStorage.setItem('hindi_tutor_token', data.token);
+    localStorage.setItem('hindi_tutor_user', JSON.stringify(data.user));
+    setUser(data.user);
+    
     try {
-      const data = await API.register(name, email, password);
-      localStorage.setItem('hindi_tutor_token', data.token);
-      localStorage.setItem('hindi_tutor_user', JSON.stringify(data.user));
-      setUser(data.user);
-      
       const meData = await API.getMe();
       setProgress(meData.progress);
       localStorage.setItem('hindi_tutor_progress', JSON.stringify(meData.progress));
-      return data;
-    } catch (err) {
-      throw err;
-    } finally {
-      setLoading(false);
+    } catch {
+      // Local progress already initialized
     }
+    return data;
   };
 
   const loginDemoLearner = async () => {
